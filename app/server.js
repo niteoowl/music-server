@@ -4,13 +4,12 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = 3000;
 
-// 1. GLOBAL CORS MIDDLEWARE (MUST be first)
+// 1. GLOBAL CORS MIDDLEWARE
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*'); // Allow ALL origins
+    res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-    // Handle Preflight immediately
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
@@ -19,7 +18,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// --- Configuration ---
+// --- Configurations ---
 const PIPED_INSTANCES = [
     'https://pipedapi.kavin.rocks',
     'https://pipedapi.adminforge.de',
@@ -31,26 +30,31 @@ const PIPED_INSTANCES = [
 let currentPipedIndex = 0;
 
 async function getPipedInstance() {
-    // Quick check logic...
-    return PIPED_INSTANCES[0]; // Fallback for speed in serverless
+    return PIPED_INSTANCES[0];
 }
 
-// --- API Router ---
-const router = express.Router();
+// --- Routes Helper ---
+// Correctly extracting path from Vercel's rewritten URL
+const getPath = (req) => {
+    // req.url is the full path e.g. /api/piped/search?q=...
+    // We want to route based on the part after /api/
+    // Express router mounted at /api will see /piped/search
+    // BUT Vercel serverless behavior is tricky.
+    // Safest is to just parse the URL manually.
+    return req.url;
+};
 
-router.get('/', (req, res) => {
-    res.json({ status: 'ok', message: 'Apple Music Clone API Server' });
-});
-
-// Piped Proxy
-router.get('/piped/*', async (req, res) => {
+// 2. ROUTES
+// Piped
+app.get('/api/piped/*', async (req, res) => {
     try {
-        // Extract path after /piped/
-        const urlPath = req.params[0];
-        const query = req.url.includes('?') ? req.url.split('?')[1] : '';
+        const fullPath = req.url; // /api/piped/something
+        const pathPart = fullPath.replace(/^\/api\/piped\//, '');
+        // Split query
+        const [pathOnly, queryPart] = pathPart.split('?');
+
         const instance = await getPipedInstance();
-
-        const targetUrl = `${instance}/${urlPath}${query ? '?' + query : ''}`;
+        const targetUrl = `${instance}/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
 
         const response = await fetch(targetUrl);
         const data = await response.json();
@@ -60,12 +64,14 @@ router.get('/piped/*', async (req, res) => {
     }
 });
 
-// Deezer Proxy
-router.get('/deezer/*', async (req, res) => {
+// Deezer
+app.get('/api/deezer/*', async (req, res) => {
     try {
-        const urlPath = req.params[0];
-        const query = req.url.includes('?') ? req.url.split('?')[1] : '';
-        const targetUrl = `https://api.deezer.com/${urlPath}${query ? '?' + query : ''}`;
+        const fullPath = req.url;
+        const pathPart = fullPath.replace(/^\/api\/deezer\//, '');
+        const [pathOnly, queryPart] = pathPart.split('?');
+
+        const targetUrl = `https://api.deezer.com/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
 
         const response = await fetch(targetUrl);
         const data = await response.json();
@@ -75,12 +81,14 @@ router.get('/deezer/*', async (req, res) => {
     }
 });
 
-// LRCLIB Proxy
-router.get('/lrclib/*', async (req, res) => {
+// LRCLIB
+app.get('/api/lrclib/*', async (req, res) => {
     try {
-        const urlPath = req.params[0];
-        const query = req.url.includes('?') ? req.url.split('?')[1] : '';
-        const targetUrl = `https://lrclib.net/${urlPath}${query ? '?' + query : ''}`;
+        const fullPath = req.url;
+        const pathPart = fullPath.replace(/^\/api\/lrclib\//, '');
+        const [pathOnly, queryPart] = pathPart.split('?');
+
+        const targetUrl = `https://lrclib.net/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
 
         const response = await fetch(targetUrl);
         const data = await response.json();
@@ -90,24 +98,14 @@ router.get('/lrclib/*', async (req, res) => {
     }
 });
 
-// 2. MOUNT ROUTER (Dual Mount Strategy)
-// Vercel might strip /api or might not, so we handle both.
-app.use('/api', router);
-app.use('/', router);
+// Health & 404
+app.get('/api', (req, res) => {
+    res.json({ status: 'ok', message: 'Apple Music Clone API Ready' });
+});
 
-// 3. 404 HANDLER (Must be last)
-// Returns JSON instead of HTML to prevent syntax errors
+// Handle 404 for API routes specifically
 app.use((req, res) => {
-    res.status(404).json({
-        error: 'Not Found',
-        path: req.path,
-        message: 'Ensure request starts with /api/deezer, /api/piped etc.'
-    });
+    res.status(404).json({ error: 'Not Found', path: req.url });
 });
-
-// Start if local
-if (require.main === module) {
-    app.listen(PORT, () => console.log(`Server running on ${PORT}`));
-}
 
 module.exports = app;

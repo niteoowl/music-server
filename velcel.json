@@ -2,8 +2,8 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/app/server.js"
+      "source": "/js/api/(.*)",
+      "destination": "/api/index.js"
     }
   ],
   "headers": [

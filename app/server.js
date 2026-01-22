@@ -46,11 +46,11 @@ router.get('/', (req, res) => {
 router.get('/piped/*', async (req, res) => {
     try {
         // Extract path after /piped/
-        const path = req.params[0];
+        const urlPath = req.params[0];
         const query = req.url.includes('?') ? req.url.split('?')[1] : '';
         const instance = await getPipedInstance();
 
-        const targetUrl = `${instance}/${path}${query ? '?' + query : ''}`;
+        const targetUrl = `${instance}/${urlPath}${query ? '?' + query : ''}`;
 
         const response = await fetch(targetUrl);
         const data = await response.json();
@@ -63,9 +63,9 @@ router.get('/piped/*', async (req, res) => {
 // Deezer Proxy
 router.get('/deezer/*', async (req, res) => {
     try {
-        const path = req.params[0];
+        const urlPath = req.params[0];
         const query = req.url.includes('?') ? req.url.split('?')[1] : '';
-        const targetUrl = `https://api.deezer.com/${path}${query ? '?' + query : ''}`;
+        const targetUrl = `https://api.deezer.com/${urlPath}${query ? '?' + query : ''}`;
 
         const response = await fetch(targetUrl);
         const data = await response.json();
@@ -78,9 +78,9 @@ router.get('/deezer/*', async (req, res) => {
 // LRCLIB Proxy
 router.get('/lrclib/*', async (req, res) => {
     try {
-        const path = req.params[0];
+        const urlPath = req.params[0];
         const query = req.url.includes('?') ? req.url.split('?')[1] : '';
-        const targetUrl = `https://lrclib.net/${path}${query ? '?' + query : ''}`;
+        const targetUrl = `https://lrclib.net/${urlPath}${query ? '?' + query : ''}`;
 
         const response = await fetch(targetUrl);
         const data = await response.json();

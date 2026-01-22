@@ -27,20 +27,27 @@ const PIPED_INSTANCES = [
     'https://pipedapi.drgns.space'
 ];
 
-let currentPipedIndex = 0;
-
 async function getPipedInstance() {
     return PIPED_INSTANCES[0];
 }
+
+// Helper to strip /api prefix if present
+const stripApiPrefix = (url) => {
+    // Matches /api/service/rest or /service/rest
+    // Captures the part after the service name
+    // Service names: piped, deezer, lrclib
+    const match = url.match(/(?:\/api)?\/(?:piped|deezer|lrclib)\/(.*)/);
+    return match ? match[1] : '';
+};
 
 // 2. ROUTES
 // Piped
 app.get('/api/piped/*', async (req, res) => {
     try {
-        const fullPath = req.url; // /api/piped/something
-        const pathPart = fullPath.replace(/^\/api\/piped\//, '');
-        // Split query
+        const pathPart = stripApiPrefix(req.url);
         const [pathOnly, queryPart] = pathPart.split('?');
+
+        if (!pathOnly && !queryPart) return res.json({ status: 'ok', service: 'piped' });
 
         const instance = await getPipedInstance();
         const targetUrl = `${instance}/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
@@ -56,8 +63,7 @@ app.get('/api/piped/*', async (req, res) => {
 // Deezer
 app.get('/api/deezer/*', async (req, res) => {
     try {
-        const fullPath = req.url;
-        const pathPart = fullPath.replace(/^\/api\/deezer\//, '');
+        const pathPart = stripApiPrefix(req.url);
         const [pathOnly, queryPart] = pathPart.split('?');
 
         const targetUrl = `https://api.deezer.com/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
@@ -73,8 +79,7 @@ app.get('/api/deezer/*', async (req, res) => {
 // LRCLIB
 app.get('/api/lrclib/*', async (req, res) => {
     try {
-        const fullPath = req.url;
-        const pathPart = fullPath.replace(/^\/api\/lrclib\//, '');
+        const pathPart = stripApiPrefix(req.url);
         const [pathOnly, queryPart] = pathPart.split('?');
 
         const targetUrl = `https://lrclib.net/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
@@ -92,7 +97,6 @@ app.get('/api', (req, res) => {
     res.json({ status: 'ok', message: 'Apple Music Clone API Ready' });
 });
 
-// Handle 404 for API routes specifically
 app.use((req, res) => {
     res.status(404).json({ error: 'Not Found', path: req.url });
 });

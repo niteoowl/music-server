@@ -4,12 +4,13 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = 3000;
 
-// 1. GLOBAL CORS MIDDLEWARE
+// 1. GLOBAL CORS MIDDLEWARE (MUST be first)
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Origin', '*'); // Allow ALL origins
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+    // Handle Preflight immediately
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
@@ -18,39 +19,80 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// --- Configurations ---
+// --- Configuration ---
 const PIPED_INSTANCES = [
-    'https://pipedapi.kavin.rocks',
-    'https://pipedapi.adminforge.de',
-    'https://api.piped.yt',
-    'https://piped-api.lunar.icu',
-    'https://pipedapi.drgns.space'
+    'https://pipedapi.kavin.rocks', // Primary
+    'https://api.piped.yt',         // Backup 1
+    'https://piped-api.lunar.icu',  // Backup 2
+    'https://pipedapi.drgns.space', // Backup 3
+    'https://pa.il.ax'              // Backup 4 (Israel)
 ];
 
-async function getPipedInstance() {
-    return PIPED_INSTANCES[0];
-}
+let currentPipedIndex = 0;
 
-// Helper to strip /api prefix if present
-const stripApiPrefix = (url) => {
-    // Matches /api/service/rest or /service/rest
-    // Captures the part after the service name
-    // Service names: piped, deezer, lrclib
-    const match = url.match(/(?:\/api)?\/(?:piped|deezer|lrclib)\/(.*)/);
-    return match ? match[1] : '';
-};
+// Removed getPipedInstance async wrapper as we use direct rotation now
 
-// 2. ROUTES
-// Piped
-app.get('/api/piped/*', async (req, res) => {
+// --- API Router ---
+const router = express.Router();
+
+router.get('/', (req, res) => {
+    res.json({ status: 'ok', message: 'Apple Music Clone API Server' });
+});
+
+// Piped Proxy
+// Enhanced Piped Proxy with Rotation
+router.get('/piped/*', async (req, res) => {
+    const urlPath = req.params[0];
+    const query = req.url.includes('?') ? req.url.split('?')[1] : '';
+
+    let lastError = null;
+
+    // Try up to 3 instances
+    for (let i = 0; i < 3; i++) {
+        try {
+            // Get current instance and rotate for next time
+            const instance = PIPED_INSTANCES[currentPipedIndex];
+            currentPipedIndex = (currentPipedIndex + 1) % PIPED_INSTANCES.length;
+
+            console.log(`[Piped Proxy] Trying instance: ${instance} (Attemp ${i + 1})`);
+
+            const targetUrl = `${instance}/${urlPath}${query ? '?' + query : ''}`;
+
+            // Set timeout for fetch
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+            const response = await fetch(targetUrl, {
+                signal: controller.signal,
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+            });
+
+            clearTimeout(timeout);
+
+            if (!response.ok) {
+                throw new Error(`Instance returned ${response.status}`);
+            }
+
+            const data = await response.json();
+            return res.json(data); // Success!
+
+        } catch (e) {
+            console.error(`[Piped Proxy] Error with instance: ${e.message}`);
+            lastError = e;
+            // Continue to next loop iteration/instance
+        }
+    }
+
+    // All attempts failed
+    res.status(500).json({ error: 'All Piped instances failed', details: lastError?.message });
+});
+
+// Deezer Proxy
+router.get('/deezer/*', async (req, res) => {
     try {
-        const pathPart = stripApiPrefix(req.url);
-        const [pathOnly, queryPart] = pathPart.split('?');
-
-        if (!pathOnly && !queryPart) return res.json({ status: 'ok', service: 'piped' });
-
-        const instance = await getPipedInstance();
-        const targetUrl = `${instance}/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
+        const urlPath = req.params[0];
+        const query = req.url.includes('?') ? req.url.split('?')[1] : '';
+        const targetUrl = `https://api.deezer.com/${urlPath}${query ? '?' + query : ''}`;
 
         const response = await fetch(targetUrl);
         const data = await response.json();
@@ -60,13 +102,12 @@ app.get('/api/piped/*', async (req, res) => {
     }
 });
 
-// Deezer
-app.get('/api/deezer/*', async (req, res) => {
+// LRCLIB Proxy
+router.get('/lrclib/*', async (req, res) => {
     try {
-        const pathPart = stripApiPrefix(req.url);
-        const [pathOnly, queryPart] = pathPart.split('?');
-
-        const targetUrl = `https://api.deezer.com/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
+        const urlPath = req.params[0];
+        const query = req.url.includes('?') ? req.url.split('?')[1] : '';
+        const targetUrl = `https://lrclib.net/${urlPath}${query ? '?' + query : ''}`;
 
         const response = await fetch(targetUrl);
         const data = await response.json();
@@ -76,29 +117,24 @@ app.get('/api/deezer/*', async (req, res) => {
     }
 });
 
-// LRCLIB
-app.get('/api/lrclib/*', async (req, res) => {
-    try {
-        const pathPart = stripApiPrefix(req.url);
-        const [pathOnly, queryPart] = pathPart.split('?');
+// 2. MOUNT ROUTER (Dual Mount Strategy)
+// Vercel might strip /api or might not, so we handle both.
+app.use('/api', router);
+app.use('/', router);
 
-        const targetUrl = `https://lrclib.net/${pathOnly}${queryPart ? '?' + queryPart : ''}`;
-
-        const response = await fetch(targetUrl);
-        const data = await response.json();
-        res.json(data);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Health & 404
-app.get('/api', (req, res) => {
-    res.json({ status: 'ok', message: 'Apple Music Clone API Ready' });
-});
-
+// 3. 404 HANDLER (Must be last)
+// Returns JSON instead of HTML to prevent syntax errors
 app.use((req, res) => {
-    res.status(404).json({ error: 'Not Found', path: req.url });
+    res.status(404).json({
+        error: 'Not Found',
+        path: req.path,
+        message: 'Ensure request starts with /api/deezer, /api/piped etc.'
+    });
 });
+
+// Start if local
+if (require.main === module) {
+    app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+}
 
 module.exports = app;

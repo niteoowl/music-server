@@ -21,11 +21,12 @@ app.use(express.json());
 
 // --- Configuration ---
 const PIPED_INSTANCES = [
-    'https://pipedapi.kavin.rocks', // Primary
-    'https://api.piped.yt',         // Backup 1
-    'https://piped-api.lunar.icu',  // Backup 2
-    'https://pipedapi.drgns.space', // Backup 3
-    'https://pa.il.ax'              // Backup 4 (Israel)
+    'https://api.piped.private.coffee', // High Uptime (99%+)
+    'https://pipedapi.drgns.space',     // Backup
+    'https://pipedapi.kavin.rocks',     // Official (often busy)
+    'https://pipedapi.leptons.xyz',     // Backup
+    'https://pipedapi.nosebs.ru',       // Backup
+    'https://piped-api.privacy.com.de'  // Backup
 ];
 
 let currentPipedIndex = 0;
@@ -60,7 +61,7 @@ router.get('/piped/*', async (req, res) => {
 
             // Set timeout for fetch
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+            const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
             const response = await fetch(targetUrl, {
                 signal: controller.signal,

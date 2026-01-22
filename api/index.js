@@ -21,12 +21,12 @@ app.use(express.json());
 
 // --- Configuration ---
 const PIPED_INSTANCES = [
-    'https://api.piped.private.coffee', // High Uptime (99%+)
-    'https://pipedapi.drgns.space',     // Backup
-    'https://pipedapi.kavin.rocks',     // Official (often busy)
-    'https://pipedapi.leptons.xyz',     // Backup
-    'https://pipedapi.nosebs.ru',       // Backup
-    'https://piped-api.privacy.com.de'  // Backup
+    'https://pipedapi-libre.kavin.rocks', // Libre (No checks, high success rate)
+    'https://api.piped.private.coffee',   // High Uptime
+    'https://pipedapi.drgns.space',       // Backup
+    'https://pipedapi.kavin.rocks',       // Official
+    'https://pipedapi.leptons.xyz',       // Backup
+    'https://pipedapi.nosebs.ru'          // Backup
 ];
 
 let currentPipedIndex = 0;
@@ -65,7 +65,13 @@ router.get('/piped/*', async (req, res) => {
 
             const response = await fetch(targetUrl, {
                 signal: controller.signal,
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://youtube.com',
+                    'Origin': 'https://youtube.com'
+                }
             });
 
             clearTimeout(timeout);

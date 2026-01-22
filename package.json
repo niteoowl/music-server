@@ -2,10 +2,10 @@
     "name": "apple-music-clone-server",
     "version": "1.0.0",
     "description": "Proxy server for Apple Music Clone",
-    "main": "server.js",
+    "main": "api/index.js",
     "scripts": {
-        "start": "node app/server.js",
-        "dev": "node app/server.js"
+        "start": "node api/index.js",
+        "dev": "node api/index.js"
     },
     "dependencies": {
         "cors": "^2.8.5",

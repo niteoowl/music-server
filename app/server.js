@@ -1,15 +1,17 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-const path = require('path');
 
 const app = express();
 const PORT = 3000;
 
-// Middleware
-app.use(cors());
+// Middleware - Explicit CORS for all
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
-app.use(express.static(path.join(__dirname))); // Serve static files from current directory
 
 // --- Configurations ---
 const PIPED_INSTANCES = [
@@ -22,32 +24,48 @@ const PIPED_INSTANCES = [
 
 let currentPipedIndex = 0;
 
-// Helper: Get working Piped instance
+// Helper: Get working Piped instance with short timeout
 async function getPipedInstance() {
     for (let i = 0; i < PIPED_INSTANCES.length; i++) {
         const index = (currentPipedIndex + i) % PIPED_INSTANCES.length;
         const instance = PIPED_INSTANCES[index];
         try {
-            const response = await fetch(`${instance}/trending?region=KR`, { timeout: 2000 });
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 1500);
+
+            const response = await fetch(`${instance}/trending?region=KR`, {
+                method: 'HEAD',
+                signal: controller.signal
+            });
+
+            clearTimeout(timeout);
+
             if (response.ok) {
                 currentPipedIndex = index;
-                // console.log(`Using Piped Instance: ${instance}`); 
                 return instance;
             }
         } catch (e) {
-            // console.warn(`Skipping instance ${instance}: ${e.message}`);
+            // Ignore
         }
     }
-    return PIPED_INSTANCES[0]; // Fallback
+    return PIPED_INSTANCES[0];
 }
 
 // --- Routes ---
 
-// 1. Piped Proxy (Music Streaming)
+// Health Check
+app.get('/', (req, res) => {
+    res.status(200).send('Apple Music Clone API Server is Running');
+});
+app.get('/api', (req, res) => {
+    res.status(200).send('API Endpoint Ready');
+});
+
+// 1. Piped Proxy
 app.get('/api/piped/*', async (req, res) => {
     try {
-        const endpoint = req.params[0]; // e.g., 'search', 'streams/ID'
-        const query = req.url.split('?')[1]; // Query params
+        const endpoint = req.params[0];
+        const query = req.url.split('?')[1];
         const instance = await getPipedInstance();
 
         const targetUrl = `${instance}/${endpoint}${query ? '?' + query : ''}`;
@@ -58,7 +76,12 @@ app.get('/api/piped/*', async (req, res) => {
             }
         });
 
-        if (!response.ok) throw new Error(`API responded with ${response.status}`);
+        // Forward headers
+        res.set('Content-Type', response.headers.get('content-type'));
+
+        if (!response.ok) {
+            return res.status(response.status).json({ error: 'Piped API Error' });
+        }
 
         const data = await response.json();
         res.json(data);
@@ -68,7 +91,7 @@ app.get('/api/piped/*', async (req, res) => {
     }
 });
 
-// 2. Deezer Proxy (Metadata)
+// 2. Deezer Proxy
 app.get('/api/deezer/*', async (req, res) => {
     try {
         const endpoint = req.params[0];
@@ -76,6 +99,11 @@ app.get('/api/deezer/*', async (req, res) => {
         const targetUrl = `https://api.deezer.com/${endpoint}${query ? '?' + query : ''}`;
 
         const response = await fetch(targetUrl);
+
+        if (!response.ok) {
+            return res.status(response.status).json({ error: 'Deezer API Error' });
+        }
+
         const data = await response.json();
         res.json(data);
     } catch (error) {
@@ -84,7 +112,7 @@ app.get('/api/deezer/*', async (req, res) => {
     }
 });
 
-// 3. LRCLIB Proxy (Lyrics)
+// 3. LRCLIB Proxy
 app.get('/api/lrclib/*', async (req, res) => {
     try {
         const endpoint = req.params[0];
@@ -92,6 +120,11 @@ app.get('/api/lrclib/*', async (req, res) => {
         const targetUrl = `https://lrclib.net/${endpoint}${query ? '?' + query : ''}`;
 
         const response = await fetch(targetUrl);
+
+        if (!response.ok) {
+            return res.status(response.status).json({ error: 'LRCLIB API Error' });
+        }
+
         const data = await response.json();
         res.json(data);
     } catch (error) {
@@ -100,19 +133,10 @@ app.get('/api/lrclib/*', async (req, res) => {
     }
 });
 
-// Serve index.html for all other routes (SPA support)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
 // Start Server (only if run directly)
 if (require.main === module) {
     app.listen(PORT, () => {
-        console.log(`\n🎵 Apple Music Clone Server running at: http://localhost:${PORT}`);
-        console.log(`   - Piped Proxy: /api/piped`);
-        console.log(`   - Deezer Proxy: /api/deezer`);
-        console.log(`   - LRCLIB Proxy: /api/lrclib`);
-        console.log(`\nReady to stream! Open http://localhost:${PORT} in your browser.\n`);
+        console.log(`Server running on port ${PORT}`);
     });
 }
 
